@@ -31,6 +31,8 @@ local address, the plugin:
 1. Locates the FreeLLMAPI install (see `FREELLMAPI_HOME` below).
 2. Starts it in the background, detached from OpenCode:
    - `node server/dist/index.js` if a production build exists, otherwise
+   - `node node_modules/tsx/dist/cli.mjs watch src/index.ts` when the TypeScript
+     source and `tsx` are present (no npm shell needed), otherwise
    - `npm run dev -w server` (server workspace only — the Vite dashboard is not
      needed for OpenCode).
 3. Probes `GET /api/health` until it answers (any HTTP status counts).
@@ -44,24 +46,80 @@ several OpenCode windows from starting duplicate servers.
 
 | Variable | Default | Purpose |
 | --- | --- | --- |
-| `FREELLMAPI_HOME` | auto-detected | FreeLLMAPI checkout/install directory (the one containing `server/`) |
+| `FREELLMAPI_HOME` | auto-detected | FreeLLMAPI checkout/install directory (trusted as-is when set explicitly) |
 | `FREELLMAPI_AUTOSTART` | `1` | Set to `0` / `false` to disable auto-start |
 | `FREELLMAPI_AUTOSTART_TIMEOUT_MS` | `25000` | How long to wait for the server to become reachable |
 | `FREELLMAPI_AUTOSTART_LOG` | `<home>/server.autostart.log` | Where server stdout/stderr is written |
-| `FREELLMAPI_NODE` | `node` | Node binary used when the plugin itself runs under Bun |
+| `FREELLMAPI_START_CMD` | — | Custom command run via the platform shell in `<home>` (Docker, desktop app, custom supervisor) |
+| `FREELLMAPI_NODE` | `node` | Node binary used when the plugin runs under Bun |
 | `FREELLMAPI_BASE_URL` | `http://127.0.0.1:3001/v1` | Used for the background refresh when config isn't available |
 
 Detection looks at `FREELLMAPI_HOME`/`FREELLMAPI_DIR`/`FREELLMAPI_ROOT`, then
 the current directory and its parents (plus a sibling `freellmapi/`), then
-`~/freellmapi`, `~/.freellmapi/app`, and `/opt/freellmapi`. A directory is
-accepted when it contains `server/dist/index.js` or `server/src/index.ts`.
+`~/freellmapi`, `~/.freellmapi/app`, `~/Documents/freellmapi`,
+`~/Projects/freellmapi`, the Windows per-user locations
+(`%LOCALAPPDATA%\Programs\freellmapi`, `%LOCALAPPDATA%\freellmapi`,
+`%APPDATA%\freellmapi`), and `/opt`, `/usr/local`, `/srv`. A directory is
+accepted when it contains `server/dist/index.js` or `server/src/index.ts`, or
+when you named it explicitly in `FREELLMAPI_HOME`.
 
 > Auto-start only ever runs for local gateways. A remote `baseURL` is never
 > spawned and simply syncs (or fails quietly) as before.
 
+### Cross-platform behavior
+
+| | macOS | Linux / Termux | Windows |
+| --- | --- | --- | --- |
+| Server runtime | `node` (native) | `node` (native) | `node.exe` |
+| Build path | `node server/dist/index.js` | same | same |
+| Dev path | `tsx` from `node_modules` | same | same (no `.cmd` needed) |
+| npm fallback | `npm` | `npm` | `npm.cmd` via shell |
+| Detached child | `detached` + `unref` | same | same, with `windowsHide` so no console flash |
+| Lock/log paths | `node:path` + `os.homedir()` | same | `node:path` + `%LOCALAPPDATA%`/`%APPDATA%` candidates |
+
+Spawn failures are swallowed (`child.on("error")`), so a missing `node`/`npm`
+degrades to "server not started" instead of crashing OpenCode.
+
+### Docker / desktop installs
+
+The official one-liner and the desktop app don't keep a `server/` source tree
+next to the data, so there is nothing to spawn directly. Either leave
+auto-start off (`FREELLMAPI_AUTOSTART=0`), or give it a command:
+
+```sh
+# Docker install (the compose file lives in ~/freellmapi)
+export FREELLMAPI_HOME="$HOME/freellmapi"
+export FREELLMAPI_START_CMD="docker compose up -d"
+```
+
+## Launcher (optional, all platforms)
+
+If you want the gateway up *before* OpenCode boots instead of during plugin
+load, use the bundled launcher. It is plain Node, so the same file works on
+macOS, Linux, Termux and Windows:
+
+```sh
+# macOS / Linux / Termux: put this repo's bin/ before the real opencode
+export PATH="/path/to/opencode_v2-freellmapi-sync/bin:$PATH"
+opencode            # starts the gateway, then OpenCode
+```
+
+```bat
+rem Windows: same idea, bin\opencode.cmd is used by PATHEXT
+set PATH=C:\path\to\opencode_v2-freellmapi-sync\bin;%PATH%
+opencode
+```
+
+The launcher waits for the gateway (bounded by
+`FREELLMAPI_AUTOSTART_TIMEOUT_MS`), then `exec`s the real OpenCode binary found
+later in `PATH`. Set `OPENCODE_BIN` if you prefer an explicit path. It skips
+its own directory during lookup, so there is no recursion.
+
 ## Requirements
 
 - OpenCode v2 plugin API (exports default `{ id, setup }`)
+- Node.js 20.18+ (same as FreeLLMAPI) — or Bun for the plugin itself; the server
+  is always started with `node`
 - A FreeLLMAPI gateway (default: `http://127.0.0.1:3001/v1`); if local, it can
   be auto-started as described above
 - An existing `provider.freellmapi` configuration in OpenCode

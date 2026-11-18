@@ -7,6 +7,7 @@ const PLUGIN_ID = "opencode-freellmapi-sync";
 const PROVIDER_ID = "freellmapi";
 const FETCH_TIMEOUT_MS = 5000;
 const DEFAULT_BASE_URL = "http://127.0.0.1:3001/v1";
+const IS_WINDOWS = process.platform === "win32";
 
 // Auto-activation defaults. All overridable from the environment so the plugin
 // stays usable with a non-default install layout.
@@ -111,9 +112,20 @@ function isServerHome(dir) {
 }
 
 function findServerHome() {
-  const candidates = [];
-  candidates.push(process.env.FREELLMAPI_HOME, process.env.FREELLMAPI_DIR, process.env.FREELLMAPI_ROOT);
+  const home = os.homedir && os.homedir();
+  // Explicit overrides are trusted as-is (a Docker install dir has no
+  // server/src, only docker-compose.yml, and pairs with FREELLMAPI_START_CMD).
+  for (const explicit of [process.env.FREELLMAPI_HOME, process.env.FREELLMAPI_DIR, process.env.FREELLMAPI_ROOT]) {
+    if (!explicit) continue;
+    const resolved = path.resolve(explicit);
+    try {
+      if (existsSync(resolved)) return resolved;
+    } catch {
+      /* keep looking */
+    }
+  }
 
+  const candidates = [];
   const cwd = process.cwd();
   candidates.push(cwd, path.join(cwd, "freellmapi"));
 
@@ -127,11 +139,26 @@ function findServerHome() {
     dir = parent;
   }
 
-  candidates.push(
-    path.join(os.homedir(), "freellmapi"),
-    path.join(os.homedir(), ".freellmapi", "app"),
-    "/opt/freellmapi",
-  );
+  if (home) {
+    candidates.push(
+      path.join(home, "freellmapi"),
+      path.join(home, ".freellmapi", "app"),
+      path.join(home, "Documents", "freellmapi"),
+      path.join(home, "Projects", "freellmapi"),
+    );
+  }
+
+  // Windows desktop / per-user installs.
+  for (const base of [process.env.LOCALAPPDATA, process.env.APPDATA]) {
+    if (!base) continue;
+    candidates.push(
+      path.join(base, "Programs", "freellmapi"),
+      path.join(base, "freellmapi"),
+    );
+  }
+
+  // Common Linux/macOS service locations.
+  candidates.push("/opt/freellmapi", "/usr/local/freellmapi", "/srv/freellmapi");
 
   const seen = new Set();
   for (const candidate of candidates) {
@@ -192,21 +219,54 @@ async function waitForServer(baseURL, timeoutMs) {
 let starting = null;
 let lastSpawnAt = 0;
 
-function spawnServer(home) {
+function resolveNodeBin() {
+  // Under Bun, process.execPath is the Bun/OpenCode binary, which is not the
+  // Node runtime FreeLLMAPI needs (better-sqlite3 native bindings). Under Node
+  // (macOS/Linux/Windows) process.execPath is the right interpreter.
+  if (process.versions?.bun) return process.env.FREELLMAPI_NODE || "node";
+  return process.execPath;
+}
+
+function buildStartCommand(home) {
+  // Escape hatch for Docker installs, the desktop app, or a custom supervisor.
+  const custom = process.env.FREELLMAPI_START_CMD;
+  if (custom) {
+    return { command: custom, args: [], cwd: home, shell: true };
+  }
+
   const serverDir = path.join(home, "server");
   const distEntry = path.join(serverDir, "dist", "index.js");
-  const hasDist = existsSync(distEntry);
+  if (existsSync(distEntry)) {
+    return { command: resolveNodeBin(), args: [distEntry], cwd: serverDir, shell: false };
+  }
 
-  // Under Bun, process.execPath is the Bun/OpenCode binary, which is not the
-  // Node runtime FreeLLMAPI needs (better-sqlite3 native bindings). Fall back to
-  // a real `node` on PATH.
-  const nodeBin = process.versions?.bun ? process.env.FREELLMAPI_NODE || "node" : process.execPath;
-  const npmBin = process.platform === "win32" ? "npm.cmd" : "npm";
+  // Run tsx directly instead of going through npm: identical on every OS and
+  // no .cmd/shell quoting problems on Windows.
+  const tsxCli = [
+    path.join(home, "node_modules", "tsx", "dist", "cli.mjs"),
+    path.join(serverDir, "node_modules", "tsx", "dist", "cli.mjs"),
+  ].find((candidate) => existsSync(candidate));
+  if (tsxCli && existsSync(path.join(serverDir, "src", "index.ts"))) {
+    return {
+      command: resolveNodeBin(),
+      args: [tsxCli, "watch", "src/index.ts"],
+      cwd: serverDir,
+      shell: false,
+    };
+  }
 
-  const command = hasDist ? nodeBin : npmBin;
-  const args = hasDist ? [distEntry] : ["run", "dev", "-w", "server"];
-  const cwd = hasDist ? serverDir : home;
+  // Last resort: the npm workspace script. Windows needs a shell to run npm.cmd
+  // (Node refuses to spawn .cmd files directly since 18.20.2 / 20.12.2).
+  return {
+    command: IS_WINDOWS ? "npm.cmd" : "npm",
+    args: ["run", "dev", "-w", "server"],
+    cwd: home,
+    shell: IS_WINDOWS,
+  };
+}
 
+function spawnServer(home) {
+  const spec = buildStartCommand(home);
   const logPath =
     process.env.FREELLMAPI_AUTOSTART_LOG || path.join(home, "server.autostart.log");
 
@@ -217,12 +277,20 @@ function spawnServer(home) {
     out = "ignore";
   }
 
-  const child = spawn(command, args, {
-    cwd,
+  const child = spawn(spec.command, spec.args, {
+    cwd: spec.cwd,
+    shell: spec.shell,
     detached: true,
+    // Avoid a console window flash on Windows, and keep stdio detached so the
+    // server outlives the OpenCode process on every platform.
+    windowsHide: true,
     stdio: out === "ignore" ? "ignore" : ["ignore", out, out],
     env: process.env,
   });
+
+  // ENOENT/EACCES arrive asynchronously. An unhandled 'error' event would take
+  // OpenCode down with it, so swallow it (ensureServer falls back to waiting).
+  child.on("error", () => {});
   child.unref();
 
   if (typeof out === "number") {
@@ -368,4 +436,5 @@ async function setup(ctx) {
   return () => {};
 }
 
+export { ensureServer, findServerHome, isLocalUrl, probe };
 export default { id: PLUGIN_ID, setup };

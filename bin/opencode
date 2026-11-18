@@ -1,0 +1,5 @@
+#!/bin/sh
+# macOS / Linux / Termux shim: `opencode` with FreeLLMAPI auto-activation.
+# Put this directory before the real opencode in PATH, or symlink this file
+# somewhere already on PATH.
+exec node "$(dirname "$0")/opencode-launcher.js" "$@"
