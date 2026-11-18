@@ -10,6 +10,52 @@ OpenCode v2 plugin that automatically syncs [FreeLLMAPI](https://github.com/tash
 
 It hooks into OpenCode's provider transform on startup/load and fetches the live model list from your running FreeLLMAPI gateway, so you don't have to manually re-run `setup-opencode` every time the catalog changes.
 
+## New to this? Start here
+
+[FreeLLMAPI](https://github.com/tashfeenahmed/freellmapi) is a local, open-source
+router that puts many free-tier LLM providers behind **one OpenAI-compatible
+endpoint** (`http://localhost:3001/v1`). You run it on your own machine, add your
+own provider keys in its dashboard, and it hands you a single `freellmapi-…`
+unified key. Requests are routed to whichever enabled model is available, with
+fallbacks.
+
+That makes it a practical **first-time alternative** when you want to try OpenCode
+without buying an API key:
+
+- no account and no paid plan — the free tiers come from providers you enable
+- everything stays local; provider keys never leave your machine
+- one config block (`provider.freellmapi`) covers every model the gateway serves
+
+This plugin is the convenience layer: it **starts the gateway for you**, keeps the
+OpenCode model catalog in sync with what the gateway actually serves, and ships a
+**`/setup` command** that walks you from "nothing installed" to a working first
+message.
+
+### First-time setup: `/setup`
+
+Copy the bundled command into your OpenCode commands directory once:
+
+```sh
+mkdir -p ~/.config/opencode/commands
+curl -fsSL https://raw.githubusercontent.com/rjcamandona123/opencode_v2-freellmapi-sync/main/commands/setup.md \
+  -o ~/.config/opencode/commands/setup.md
+```
+
+Then run `/setup` in OpenCode. It will:
+
+1. check whether the gateway is running (and start it if it is not),
+2. open the dashboard flow for adding a provider key and copying the unified key,
+3. validate the key against `/v1/models`,
+4. run `npx freellmapi setup-opencode` and verify a real completion.
+
+Already have a key? Pass it directly: `/setup freellmapi-yourkey`. On Windows the
+command path is `%USERPROFILE%\.config\opencode\commands\setup.md`.
+
+> If FreeLLMAPI is not installed at all, `/setup` stops and shows the install
+> options (Docker one-liner, source checkout, or the desktop app) instead of
+> guessing.
+
+
 ## What it does
 
 - Reads `provider.freellmapi.options.baseURL` and `provider.freellmapi.options.apiKey` from your OpenCode config
