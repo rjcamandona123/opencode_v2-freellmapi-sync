@@ -1,0 +1,23 @@
+{
+  "name": "opencode_v2-freellmapi-sync",
+  "version": "0.1.0",
+  "description": "OpenCode v2 plugin to auto-sync FreeLLMAPI models into the provider catalog",
+  "type": "module",
+  "main": "index.js",
+  "files": [
+    "index.js",
+    "README.md",
+    "LICENSE"
+  ],
+  "keywords": [
+    "opencode",
+    "opencode-plugin",
+    "freellmapi",
+    "ai",
+    "llm"
+  ],
+  "license": "MIT",
+  "peerDependencies": {
+    "@opencode-ai/plugin": "*"
+  }
+}
