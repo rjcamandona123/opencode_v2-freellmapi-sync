@@ -26,23 +26,31 @@ It hooks into OpenCode's provider transform on startup/load and fetches the live
 
 ## Install
 
-### Local plugin file (simple)
+### With OpenCode CLI (recommended)
+
+```sh
+opencode plugin add git+https://github.com/rjcamandona123/opencode_v2-freellmapi-sync.git
+```
+
+Then reload/restart OpenCode if needed.
+
+### Local plugin file (manual)
 
 Copy `index.js` to your OpenCode plugins directory (for example `~/.config/opencode/plugins/freellmapi-sync.js`) and reload/restart OpenCode.
 
-### From Git (if supported by your OpenCode setup)
+### Manual config entry (Git spec)
 
-Add the plugin to your OpenCode config (example):
+If you prefer editing config directly, add the plugin to your OpenCode config (example):
 
 ```jsonc
 {
   "plugins": [
-    "opencode_v2-freellmapi-sync@git+https://github.com/rjcamandona123/opencode_v2-freellmapi-sync.git"
+    "git+https://github.com/rjcamandona123/opencode_v2-freellmapi-sync.git"
   ]
 }
 ```
 
-> Plugin loading/install syntax can vary by OpenCode version/environment. If your setup doesn't load git plugins directly, use the local plugin file method.
+> Plugin spec formats can vary by OpenCode version/environment. If `opencode plugin add` or the git spec above doesn’t work in your setup, use the local plugin file method.
 
 ## Example OpenCode provider config
 
