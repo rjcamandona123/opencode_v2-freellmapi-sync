@@ -16,12 +16,54 @@ It hooks into OpenCode's provider transform on startup/load and fetches the live
 - Resolves `{env:VAR}` placeholders in `apiKey` (e.g. `{env:FREELLMAPI_API_KEY}`)
 - Calls `GET {baseURL}/models` with `Authorization: Bearer <apiKey>`
 - Builds model entries from the gateway response and updates `provider.freellmapi.models`
-- Fails silently/unobtrusively if FreeLLMAPI is unreachable (OpenCode can still start)
+- **Auto-activates the local gateway:** if the configured `baseURL` is local
+  (`localhost` / `127.0.0.1`) and nothing answers, it starts the FreeLLMAPI
+  server detached, waits for it to come up, then syncs the catalog. This removes
+  the `ECONNREFUSED ... Retrying in 7s` loop you get when the server isn't
+  running.
+- Falls back to leaving OpenCode untouched if activation isn't possible
+
+## Auto-activation
+
+When `GET /v1/models` fails with a connection error and `baseURL` points at a
+local address, the plugin:
+
+1. Locates the FreeLLMAPI install (see `FREELLMAPI_HOME` below).
+2. Starts it in the background, detached from OpenCode:
+   - `node server/dist/index.js` if a production build exists, otherwise
+   - `npm run dev -w server` (server workspace only — the Vite dashboard is not
+     needed for OpenCode).
+3. Probes `GET /api/health` until it answers (any HTTP status counts).
+4. Fetches the model list and reloads the provider/model catalog.
+
+Server output is appended to `server.autostart.log` in the install directory.
+Only one activation is attempted per minute, and a `.autostart.lock` file stops
+several OpenCode windows from starting duplicate servers.
+
+### Activation settings
+
+| Variable | Default | Purpose |
+| --- | --- | --- |
+| `FREELLMAPI_HOME` | auto-detected | FreeLLMAPI checkout/install directory (the one containing `server/`) |
+| `FREELLMAPI_AUTOSTART` | `1` | Set to `0` / `false` to disable auto-start |
+| `FREELLMAPI_AUTOSTART_TIMEOUT_MS` | `25000` | How long to wait for the server to become reachable |
+| `FREELLMAPI_AUTOSTART_LOG` | `<home>/server.autostart.log` | Where server stdout/stderr is written |
+| `FREELLMAPI_NODE` | `node` | Node binary used when the plugin itself runs under Bun |
+| `FREELLMAPI_BASE_URL` | `http://127.0.0.1:3001/v1` | Used for the background refresh when config isn't available |
+
+Detection looks at `FREELLMAPI_HOME`/`FREELLMAPI_DIR`/`FREELLMAPI_ROOT`, then
+the current directory and its parents (plus a sibling `freellmapi/`), then
+`~/freellmapi`, `~/.freellmapi/app`, and `/opt/freellmapi`. A directory is
+accepted when it contains `server/dist/index.js` or `server/src/index.ts`.
+
+> Auto-start only ever runs for local gateways. A remote `baseURL` is never
+> spawned and simply syncs (or fails quietly) as before.
 
 ## Requirements
 
 - OpenCode v2 plugin API (exports default `{ id, setup }`)
-- A running FreeLLMAPI gateway (default: `http://127.0.0.1:3001/v1`)
+- A FreeLLMAPI gateway (default: `http://127.0.0.1:3001/v1`); if local, it can
+  be auto-started as described above
 - An existing `provider.freellmapi` configuration in OpenCode
 
 ## Install
