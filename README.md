@@ -1,5 +1,11 @@
 # opencode_v2-freellmapi-sync
 
+[![OpenCode v2 Plugin](https://img.shields.io/badge/OpenCode-v2%20Plugin-111111?style=for-the-badge&logo=opencode&logoColor=white)](https://opencode.ai/)
+[![FreeLLMAPI Compatible](https://img.shields.io/badge/FreeLLMAPI-Compatible-2563EB?style=for-the-badge)](https://github.com/tashfeenahmed/freellmapi)
+[![License: MIT](https://img.shields.io/badge/License-MIT-F59E0B?style=for-the-badge)](LICENSE)
+[![JavaScript ESM](https://img.shields.io/badge/JavaScript-ESM-F7DF1E?style=for-the-badge&logo=javascript&logoColor=000000)](./index.js)
+[![GitHub Repo](https://img.shields.io/badge/GitHub-rjcamandona123%2Fopencode__v2--freellmapi--sync-181717?style=for-the-badge&logo=github&logoColor=white)](https://github.com/rjcamandona123/opencode_v2-freellmapi-sync)
+
 OpenCode v2 plugin that automatically syncs [FreeLLMAPI](https://github.com/tashfeenahmed/freellmapi) models into your `provider.freellmapi` catalog.
 
 It hooks into OpenCode's provider transform on startup/load and fetches the live model list from your running FreeLLMAPI gateway, so you don't have to manually re-run `setup-opencode` every time the catalog changes.
