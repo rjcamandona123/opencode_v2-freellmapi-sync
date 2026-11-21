@@ -31,6 +31,27 @@ function resolveEnvTemplate(value) {
   return value.replace(/\{env:([A-Za-z_][A-Za-z0-9_]*)\}/g, (_, name) => process.env[name] ?? "");
 }
 
+// Newer FreeLLMAPI generators store the key in OpenCode's auth.json instead of
+// an {env:...} placeholder in opencode.json. Read it here only for the catalog
+// refresh; OpenCode itself injects it into requests from that same file.
+function readOpenCodeAuthKey() {
+  const dataHome =
+    process.env.XDG_DATA_HOME?.trim() || path.join(os.homedir(), ".local", "share");
+  try {
+    const auth = JSON.parse(
+      readFileSync(path.join(dataHome, "opencode", "auth.json"), "utf8"),
+    );
+    for (const id of Object.keys(auth || {})) {
+      if (id !== PROVIDER_ID && !id.startsWith(`${PROVIDER_ID}-`)) continue;
+      const key = auth[id]?.key;
+      if (typeof key === "string" && key) return key;
+    }
+  } catch {
+    /* no auth.json, or unreadable */
+  }
+  return "";
+}
+
 function discoverModels(modelsArray) {
   if (!Array.isArray(modelsArray)) return {};
   const models = {};
@@ -363,16 +384,27 @@ async function setup(ctx) {
   const getProviderBase = (current) => {
     const existing = current?.[PROVIDER_ID] || {};
     const options = existing.options || {};
+    const authKey = readOpenCodeAuthKey();
+    const nextOptions = {
+      ...options,
+      baseURL: options.baseURL || DEFAULT_BASE_URL,
+    };
+    if (options.apiKey !== undefined && options.apiKey !== null && options.apiKey !== "") {
+      nextOptions.apiKey = options.apiKey;
+    } else if (!authKey) {
+      // Legacy fallback for configs that carry no key at all.
+      nextOptions.apiKey = "{env:FREELLMAPI_API_KEY}";
+    } else {
+      // Newer generator: key lives in auth.json. Leave the config key-free so
+      // OpenCode's credential layer supplies it instead of an empty placeholder.
+      delete nextOptions.apiKey;
+    }
     return {
       ...existing,
       id: existing.id || PROVIDER_ID,
       name: existing.name || "FreeLLMAPI",
       npm: existing.npm || "@ai-sdk/openai-compatible",
-      options: {
-        ...options,
-        baseURL: options.baseURL || DEFAULT_BASE_URL,
-        apiKey: options.apiKey || "{env:FREELLMAPI_API_KEY}",
-      },
+      options: nextOptions,
     };
   };
 
@@ -385,7 +417,7 @@ async function setup(ctx) {
       try {
         // Best-effort: read base config from current transformed state isn't directly available here,
         // so fall back to env/config defaults. The transform below also tries on-the-fly.
-        const apiKey = process.env.FREELLMAPI_API_KEY || "";
+        const apiKey = process.env.FREELLMAPI_API_KEY || readOpenCodeAuthKey();
         let models = await fetchModels(baseURL, apiKey);
         if (!models) {
           // Activation may still be in flight (or the gateway was stopped after
@@ -410,7 +442,8 @@ async function setup(ctx) {
 
   await ctx.provider.transform(async (current) => {
     const provider = getProviderBase(current);
-    const { baseURL, apiKey } = provider.options;
+    const { baseURL } = provider.options;
+    const apiKey = resolveEnvTemplate(provider.options.apiKey) || readOpenCodeAuthKey();
 
     // Start the local gateway first (no-op when already up), so the very first
     // model fetch doesn't hit ECONNREFUSED.

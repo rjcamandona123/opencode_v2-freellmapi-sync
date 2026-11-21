@@ -39,7 +39,10 @@ Steps:
 5. **Configure OpenCode with the official generator.**
    - Back up the current config first (`~/.config/opencode/opencode.json` on macOS/Linux, `%USERPROFILE%\.config\opencode\opencode.json` on Windows).
    - Run: `npx -y freellmapi setup-opencode --url http://127.0.0.1:3001 --api-key <key>`
-   - This writes the `provider.freellmapi` entry, stores the key in OpenCode's `auth.json`, sets `model` to `freellmapi/auto`, and imports the live model list. Preserve any unrelated settings the user already has.
+   - This writes the `provider.freellmapi` entry, sets `model` to `freellmapi/auto`, and imports the live model list. Preserve any unrelated settings the user already has.
+   - Key storage depends on the generator version:
+     - Published `freellmapi` **0.8.x** (what `npx` installs) puts `apiKey: "{env:FREELLMAPI_API_KEY}"` in the config and prints a reminder to export that variable; it does **not** write `auth.json`. Tell the user to export `FREELLMAPI_API_KEY` before starting OpenCode.
+     - Newer in-repo / desktop-app generators write the key to `~/.local/share/opencode/auth.json` (`%USERPROFILE%\.local\share\opencode\auth.json` on Windows) and leave `apiKey` undefined in the config. No export is needed; the sync plugin reads `auth.json` for its catalog refresh too.
 
 6. **Verify end to end.**
    Send a tiny completion to `POST http://127.0.0.1:3001/v1/chat/completions` with `{"model":"auto","messages":[{"role":"user","content":"Say OK"}],"max_tokens":8}` and the unified key. Report which upstream model answered.

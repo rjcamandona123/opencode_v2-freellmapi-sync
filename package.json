@@ -1,6 +1,6 @@
 {
   "name": "opencode_v2-freellmapi-sync",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "OpenCode v2 plugin for FreeLLMAPI — a free, local, OpenAI-compatible LLM router you run yourself. Syncs the live model catalog, auto-starts the gateway, and ships a /setup command, making it a practical alternative for first-timers without paid API keys.",
   "type": "module",
   "main": "index.js",

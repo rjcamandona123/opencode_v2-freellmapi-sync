@@ -59,7 +59,7 @@ command path is `%USERPROFILE%\.config\opencode\commands\setup.md`.
 ## What it does
 
 - Reads `provider.freellmapi.options.baseURL` and `provider.freellmapi.options.apiKey` from your OpenCode config
-- Resolves `{env:VAR}` placeholders in `apiKey` (e.g. `{env:FREELLMAPI_API_KEY}`)
+- Resolves `{env:VAR}` placeholders in `apiKey` (e.g. `{env:FREELLMAPI_API_KEY}`) and falls back to the unified key in OpenCode's `auth.json`, which newer FreeLLMAPI generators use instead of the placeholder
 - Calls `GET {baseURL}/models` with `Authorization: Bearer <apiKey>`
 - Builds model entries from the gateway response and updates `provider.freellmapi.models`
 - **Auto-activates the local gateway:** if the configured `baseURL` is local
